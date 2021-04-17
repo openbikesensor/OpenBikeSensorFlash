@@ -28,10 +28,8 @@
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
 
-
 // Version only change the "vN.M" part if needed.
 const char *VERSION = "v0.1" BUILD_NUMBER;
-
 
 // SD Card
 // Selected the same values as for the OBS!
@@ -68,9 +66,9 @@ const uint8_t partition_table[] = {
         0xFE, 0xCD, 0xE8, 0x51, 0x9F, 0xAE, 0x28, 0xAB, 0xE8, 0x12, 0x4E, 0x8C, 0xCC, 0xDE, 0x1B, 0x82
 };
 
-static const char *TAG = "esp32-flash-sd";
+static const char *TAG = "flash-sd";
 
-static void fail(char *message) {
+static void fail(const char *message) {
     ESP_LOGE(TAG, "Fatal error %s.", message);
     ESP_LOGE(TAG, "Will abort in a moment.");
     sleep(30);
@@ -113,7 +111,7 @@ static void ensurePartition(const esp_partition_t *target) {
     }
 }
 
-void write_partition_table() {
+static void write_partition_table() {
     ESP_LOGI(TAG, "Will replace partition table.");
     ESP_LOGD(TAG, "Will erase partition table.");
     ESP_ERROR_CHECK(spi_flash_erase_range(CONFIG_PARTITION_TABLE_OFFSET, 0x2000));
@@ -123,7 +121,7 @@ void write_partition_table() {
     esp_restart();
 }
 
-const esp_partition_t *ensureNewPartitionTable() {
+static const esp_partition_t *ensureNewPartitionTable() {
     const esp_partition_t *app = esp_partition_find_first(
             ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0,
             "app"); // already there?
@@ -135,7 +133,7 @@ const esp_partition_t *ensureNewPartitionTable() {
     return app;
 }
 
-sdmmc_card_t *mountSdCard() {
+static sdmmc_card_t *mountSdCard() {
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
             .format_if_mount_failed = false,
             .max_files = 1,
@@ -161,7 +159,7 @@ sdmmc_card_t *mountSdCard() {
     return card;
 }
 
-FILE *openAppFile() {
+static FILE *openAppFile() {
     FILE *f = fopen(MOUNT_POINT FLASH_APP_FILENAME, "r");
     if (!f) {
         fail("Failed to find '" FLASH_APP_FILENAME "' on sd card.");
@@ -169,7 +167,7 @@ FILE *openAppFile() {
     return f;
 }
 
-void flashFromSd(const esp_partition_t *appPartition) {
+static void flashFromSd(const esp_partition_t *appPartition) {
     ESP_LOGI(TAG, "Will flash from SD card.");
     FILE *f = openAppFile();
     esp_ota_handle_t out_handle;
@@ -191,7 +189,7 @@ void flashFromSd(const esp_partition_t *appPartition) {
     ESP_LOGI(TAG, "Flash from SD card done.");
 }
 
-void calculateSha256(FILE *f, uint8_t *shaResult, int32_t bytes) {
+static void calculateSha256(FILE *f, uint8_t *shaResult, int32_t bytes) {
     mbedtls_md_context_t ctx;
     mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
     mbedtls_md_init(&ctx);
@@ -215,7 +213,7 @@ void calculateSha256(FILE *f, uint8_t *shaResult, int32_t bytes) {
     mbedtls_md_free(&ctx);
 }
 
-void assertValidAppBin() {
+static void assertValidAppBin() {
     FILE *f = openAppFile();
 
     fseek(f, 0, SEEK_END);
