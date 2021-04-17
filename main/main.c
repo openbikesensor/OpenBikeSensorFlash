@@ -232,6 +232,8 @@ static void assertValidAppBin() {
         int c = fgetc(f);
         if (shaResult[i] != c) {
             ESP_LOGE(TAG, "%02x != %02x", (int) shaResult[i], (int) c);
+            ESP_ERROR_CHECK_WITHOUT_ABORT(
+                    esp_ota_mark_app_invalid_rollback_and_reboot());
             fail("Checksum mismatch " FLASH_APP_FILENAME " corrupted.");
         }
     }
