@@ -36,15 +36,15 @@ to allow a small partition size.
 
 SPI_FLASH_DANGEROUS_WRITE - must be set to allow
 
-Partition table after the update is binary stored in `main/sd-partition-table.bin` you
+Partition table after the update is binary stored in `partition_table` you
 can see the content in `main/sd-partition-table.csv` it results in the following:
 
-    boot: ## Label            Usage          Type ST Offset   Length
-    boot:  0 nvs              WiFi data        01 02 00009000 00005000
-    boot:  1 otadata          OTA data         01 00 0000e000 00002000
-    boot:  2 sdflash          OTA app          00 10 00010000 00040000
-    boot:  3 app              OTA app          00 11 00050000 00380000
-    boot:  4 spiffs           Unknown data     01 82 003d0000 00030000
+    # Name,   Type, SubType, Offset,  Size, Flags
+    nvs,      data, nvs,     0x009000, 0x005000,
+    otadata,  data, ota,     0x00e000, 0x002000,
+    app,      app,  ota_0,   0x010000, 0x380000,
+    sdflash,  app,  ota_1,   0x390000, 0x040000,
+    spiffs,   data, spiffs,  0x3D0000, 0x030000,
 
 It is mainly based on the existing partition schema, to change as little as possible
 and let existing `spiffs` data intact.
