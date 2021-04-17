@@ -21,17 +21,12 @@
  * see <http://www.gnu.org/licenses/>.
  */
 #include <stdio.h>
+#include <mbedtls/md.h>
 #include "esp_system.h"
 #include "esp_ota_ops.h"
-#include "esp_partition.h"
-#include "esp_err.h"
 #include "esp_log.h"
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
-#include "sdmmc_cmd.h"
-#include "sdkconfig.h"
-#include "driver/sdspi_host.h"
-#include "esp_partition.h"
 
 
 // Version only change the "vN.M" part if needed.
@@ -48,6 +43,9 @@ const char *VERSION = "v0.1" BUILD_NUMBER;
 #define SPI_DMA_CHAN    1
 
 #define MOUNT_POINT "/sd"
+#define FLASH_APP_FILENAME "/sdflash/app.bin"
+#define APP_PARTITION_SIZE 0x380000
+#define HASH_LEN 32 // SHA-256 digest length
 
 const uint8_t partition_table[] = {
 // nvs,      data, nvs,     0x009000, 0x005000,
@@ -72,39 +70,45 @@ const uint8_t partition_table[] = {
 
 static const char *TAG = "esp32-flash-sd";
 
+static void fail(char *message) {
+    ESP_LOGE(TAG, "Fatal error %s.", message);
+    ESP_LOGE(TAG, "Will abort in a moment.");
+    sleep(30);
+    abort();
+}
+
 static void logAppVersion(const esp_partition_t *partition) {
     esp_app_desc_t app_desc;
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_get_partition_description(partition, &app_desc));
-    char hash_print[17];
-    hash_print[16] = 0;
-    for (int i = 0; i < 8; ++i) {
+    char hash_print[HASH_LEN * 2 + 1];
+    hash_print[HASH_LEN * 2] = 0;
+    for (int i = 0; i < HASH_LEN; ++i) {
         sprintf(&hash_print[i * 2], "%02x", app_desc.app_elf_sha256[i]);
     }
-    ESP_LOGI(TAG, "App '%s', Version: '%s', IDF-Version: '%s', sha-256: %s..., date: '%s', time: '%s'",
-             app_desc.project_name, app_desc.version, app_desc.idf_ver, hash_print, app_desc.date, app_desc.time);
+    ESP_LOGI(TAG, "App '%s', Version: '%s'", app_desc.project_name, app_desc.version);
+    ESP_LOGI(TAG, "IDF-Version: '%s'", app_desc.idf_ver);
+    ESP_LOGI(TAG, "sha-256: %s", hash_print);
+    ESP_LOGI(TAG, "date: '%s', time: '%s'", app_desc.date, app_desc.time);
 }
 
-static void ensureOta1() {
+static void ensurePartition(const esp_partition_t *target) {
     const esp_partition_t *running = esp_ota_get_running_partition();
     ESP_LOGI(TAG, "Running partition: %s", running->label);
 
-    if (running->type == ESP_PARTITION_TYPE_APP && running->subtype != ESP_PARTITION_SUBTYPE_APP_OTA_1) {
-        const esp_partition_t *ota1 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1,
-                                                               NULL);
-        ESP_ERROR_CHECK(esp_partition_erase_range(ota1, 0, ota1->size));
-        ESP_LOGI(TAG, "Copying ota%d (%s) -> ota0 (%s)", running->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0,
-                 running->label, ota1->label);
-        ESP_LOGI(TAG, "Target partition: size 0x%0x", ota1->size);
-        // TODO: Check size; we get error if size differs!
+    if (running != target) {
+        ESP_ERROR_CHECK(esp_partition_erase_range(target, 0, target->size));
+        ESP_LOGI(TAG, "Copying %s (0x%06x) -> %s (0x%06x) 0x%x bytes",
+                 running->label, running->address,
+                 target->label, target->address, target->size);
         const uint16_t s = 8192;
         void *buffer = malloc(s);
-        for (int i = 0; i < ota1->size; i += s) {
+        for (size_t i = 0; i < target->size; i += s) {
             ESP_ERROR_CHECK(esp_partition_read(running, i, buffer, s));
-            ESP_ERROR_CHECK(esp_partition_write(ota1, i, buffer, s));
+            ESP_ERROR_CHECK(esp_partition_write(target, i, buffer, s));
         }
         free(buffer);
-        ESP_ERROR_CHECK(esp_ota_set_boot_partition(ota1));
-        ESP_LOGE(TAG, "Partition swap done will restart.");
+        ESP_ERROR_CHECK(esp_ota_set_boot_partition(target));
+        ESP_LOGI(TAG, "Partition swap done, will restart.");
         esp_restart();
     }
 }
@@ -115,7 +119,7 @@ void write_partition_table() {
     ESP_ERROR_CHECK(spi_flash_erase_range(CONFIG_PARTITION_TABLE_OFFSET, 0x2000));
     ESP_LOGD(TAG, "Will write new partition table.");
     ESP_ERROR_CHECK(spi_flash_write(CONFIG_PARTITION_TABLE_OFFSET, partition_table, sizeof(partition_table)));
-    ESP_LOGI(TAG, "New partition table created, will reboot.");
+    ESP_LOGI(TAG, "New partition table created, will restart.");
     esp_restart();
 }
 
@@ -131,7 +135,7 @@ const esp_partition_t *ensureNewPartitionTable() {
     return app;
 }
 
-const sdmmc_card_t *mountSdCard() {
+sdmmc_card_t *mountSdCard() {
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
             .format_if_mount_failed = false,
             .max_files = 1,
@@ -153,30 +157,33 @@ const sdmmc_card_t *mountSdCard() {
     slot_config.gpio_cs = PIN_NUM_CS;
     slot_config.host_id = host.slot;
     ESP_ERROR_CHECK(esp_vfs_fat_sdspi_mount(MOUNT_POINT, &host, &slot_config, &mount_config, &card));
+    ESP_LOGI(TAG, "SD card mounted");
     return card;
+}
+
+FILE *openAppFile() {
+    FILE *f = fopen(MOUNT_POINT FLASH_APP_FILENAME, "r");
+    if (!f) {
+        fail("Failed to find '" FLASH_APP_FILENAME "' on sd card.");
+    }
+    return f;
 }
 
 void flashFromSd(const esp_partition_t *appPartition) {
     ESP_LOGI(TAG, "Will flash from SD card.");
-    FILE *f = fopen(MOUNT_POINT"/sdflash/app.bin", "r");
-    if (!f) {
-        ESP_LOGE(TAG, "Failed to find 'sdflash/app.bin' on sd card.");
-        return;
-    }
+    FILE *f = openAppFile();
     esp_ota_handle_t out_handle;
     esp_ota_begin(appPartition, OTA_SIZE_UNKNOWN/*?*/, &out_handle);
 
     const uint16_t size = 8192;
     void *buffer = malloc(size);
-    uint16_t read;
+    uint32_t read;
     while ((read = fread(buffer, 1, size, f)) > 0) {
         ESP_ERROR_CHECK(esp_ota_write(out_handle, buffer, read));
     }
     free(buffer);
     if (!feof(f)) {
-        ESP_LOGE(TAG, "Failed to read 'sdflash/app.bin'.");
-        // FIXME!!
-        return;
+        fail("Failed to read '" FLASH_APP_FILENAME "'.");
     }
     fclose(f);
 
@@ -184,29 +191,95 @@ void flashFromSd(const esp_partition_t *appPartition) {
     ESP_LOGI(TAG, "Flash from SD card done.");
 }
 
+void calculateSha256(FILE *f, uint8_t *shaResult, int32_t bytes) {
+    mbedtls_md_context_t ctx;
+    mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
+    mbedtls_md_starts(&ctx);
+
+    const uint16_t bufferSize = 8192;
+    void *buffer = malloc(bufferSize);
+    uint32_t toRead = bufferSize;
+    uint32_t read;
+    uint32_t readFromFile = 0;
+    while ((read = fread(buffer, 1, toRead, f)) > 0) {
+        mbedtls_md_update(&ctx, (const unsigned char *) buffer, read);
+        readFromFile += read;
+        if (readFromFile + toRead > bytes) {
+            toRead = bytes - readFromFile;
+        }
+    }
+    free(buffer);
+    mbedtls_md_finish(&ctx, shaResult);
+    mbedtls_md_free(&ctx);
+}
+
+void assertValidAppBin() {
+    FILE *f = openAppFile();
+
+    fseek(f, 0, SEEK_END);
+    const int32_t fileSize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    ESP_LOGI(TAG, "Found '" FLASH_APP_FILENAME "' size %0x", fileSize);
+    if (fileSize > APP_PARTITION_SIZE) {
+        fail("Firmware to flash is to large.");
+    }
+
+    ESP_LOGI(TAG, "Testing integrity.");
+    uint8_t shaResult[HASH_LEN];
+    calculateSha256(f, shaResult, fileSize - HASH_LEN);
+
+    for (int i = 0; i < HASH_LEN; i++) {
+        int c = fgetc(f);
+        if (shaResult[i] != c) {
+            ESP_LOGE(TAG, "%02x != %02x", (int) shaResult[i], (int) c);
+            fail("Checksum mismatch " FLASH_APP_FILENAME " corrupted.");
+        }
+    }
+    fclose(f);
+    ESP_LOGI(TAG, "File check valid.");
+}
+
 void app_main() {
+    ESP_LOGI(TAG, "OpenBikeSensorFlash version %s.", VERSION);
 
     // todo check reset reason!
     esp_reset_reason_t resetReason = esp_reset_reason();
     ESP_LOGI(TAG, "Reset reason 0x%x.", resetReason); // should be ESP_RST_POWERON or ESP_RST_SW
 
-    // todo ensureSdContent() / check if already flashed at that version?
-    // check if there is a version at all
-
-    esp_ota_mark_app_valid_cancel_rollback();
-
-    ensureOta1();
-    const esp_partition_t *appPartition = ensureNewPartitionTable();
-    sdmmc_card_t *card = mountSdCard();
-
     const esp_partition_t *running = esp_ota_get_running_partition();
     ESP_LOGI(TAG, "Running partition: %s", running->label);
     logAppVersion(running);
 
+    sdmmc_card_t *card = mountSdCard();
+    assertValidAppBin();
+
+    esp_ota_mark_app_valid_cancel_rollback();
+
+    if (running->address == 0x10000) {
+        ensureNewPartitionTable();
+        ensurePartition(
+                esp_partition_find_first(ESP_PARTITION_TYPE_APP,
+                                         ESP_PARTITION_SUBTYPE_APP_OTA_1,
+                                         NULL));
+    } else if (running->address != 0x390000) {
+        const esp_partition_t *app = esp_partition_find_first(ESP_PARTITION_TYPE_APP,
+                                                              ESP_PARTITION_SUBTYPE_ANY,
+                                                              NULL);
+        if (app->address != 0x10000) {
+            ESP_LOGE(TAG, "FATAL: 1st app partition '%s' unexpected start address: 0x%06x",
+                     app->label, app->address);
+            abort();
+        }
+        ensurePartition(app);
+    }
+
+    const esp_partition_t *appPartition = ensureNewPartitionTable();
+
     flashFromSd(appPartition);
     logAppVersion(appPartition);
     ESP_ERROR_CHECK(esp_ota_set_boot_partition(appPartition));
-
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_vfs_fat_sdcard_unmount(MOUNT_POINT, card));
     esp_restart();
 }
