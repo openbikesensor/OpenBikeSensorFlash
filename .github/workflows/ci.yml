@@ -103,11 +103,11 @@ jobs:
 
     - name: Package firmware
       run: |
-        cp bin/.pio/build/esp32dev/firmware.bin 0x10000.bin
-        cp bin/.pio/build/esp32dev/firmware.bin flashsd.bin
+        cp .pio/build/esp32dev/firmware.bin 0x10000.bin
+        cp .pio/build/esp32dev/firmware.bin flash.bin
         wget --no-verbose -O COPYRIGHT-ESP.html https://docs.espressif.com/projects/esp-idf/en/latest/esp32/COPYRIGHT.html
         zip --junk-paths obs-flash-${{ env.OBS_FLASH_VERSION }}.zip \
-          bin/.pio/build/esp32dev/firmware.bin \
+          flash.bin \
           COPYRIGHT-ESP.html \
           LICENSE-ARDUINO-ESP32.md \
           LICENSE
@@ -119,13 +119,13 @@ jobs:
       run: |
         # Hack - point sonarqube to the real sources not the copy of it
         # See also https://community.sonarsource.com/t/scanning-platformio-c-embeded-projects/35141/2
-        sed -i 's|OpenBikeSensorFlash/bin|OpenBikeSensorFlash|g' \
-            sonarqube-out/build-wrapper-dump.json
+        # sed -i 's|OpenBikeSensorFlash/bin|OpenBikeSensorFlash|g' \
+        #    sonarqube-out/build-wrapper-dump.json
         # looks like pio copys our source from the main folder to a src folder
-        sed -i 's|"src/|"main/|g' \
-            sonarqube-out/build-wrapper-dump.json
-        sed -i 's|\.pio/|bin/.pio/|g' \
-            sonarqube-out/build-wrapper-dump.json
+        # sed -i 's|"src/|"main/|g' \
+        #    sonarqube-out/build-wrapper-dump.json
+        # sed -i 's|\.pio/|bin/.pio/|g' \
+        #    sonarqube-out/build-wrapper-dump.json
         # replace gcc with our script that reports the fake arch "le32-unknown-nacl"
         sed -i "s|/github/home/.platformio/packages/toolchain-xtensa32/bin/xtensa-esp32-elf-g..|`pwd`/.github/fake-cc|g" \
             sonarqube-out/build-wrapper-dump.json
@@ -146,7 +146,7 @@ jobs:
       with:
         name: obs-flash-${{ env.OBS_FLASH_VERSION }}
         path: |
-          bin/.pio/build/esp32dev/firmware.bin
+          flash.bin
           sonarqube-out/build-wrapper-dump.json
           COPYRIGHT-ESP.html
           LICENSE-ARDUINO-ESP32.md
@@ -210,6 +210,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./bin/.pio/build/esp32dev/firmware.bin
+        asset_path: flash.bin
         asset_name: flash.bin
         asset_content_type: application/x-esp32
