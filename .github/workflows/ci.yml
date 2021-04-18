@@ -96,10 +96,10 @@ jobs:
 
     - name: Build flashsd
       run: |
-        cp sdkconfig partitions.csv main
         mkdir sonarqube-out
         ./sonarqube/build-wrapper-linux-x86/build-wrapper-linux-x86-64 --out-dir sonarqube-out \
-          platformio ci -v --build-dir="./bin" --keep-build-dir --project-conf=platformio.ini ./main/
+          platformio run --disable-auto-clean
+        # platformio ci -v --build-dir="./bin" --keep-build-dir --project-conf=platformio.ini ./main/
 
     - name: Package firmware
       run: |
