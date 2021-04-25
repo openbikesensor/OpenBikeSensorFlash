@@ -109,7 +109,6 @@ jobs:
         zip --junk-paths obs-flash-${{ env.OBS_FLASH_VERSION }}.zip \
           flash.bin \
           COPYRIGHT-ESP.html \
-          LICENSE-ARDUINO-ESP32.md \
           LICENSE
 
     - name: Analyze with SonarCloud
@@ -149,7 +148,6 @@ jobs:
           flash.bin
           sonarqube-out/build-wrapper-dump.json
           COPYRIGHT-ESP.html
-          LICENSE-ARDUINO-ESP32.md
           LICENSE
         if-no-files-found: error
 
