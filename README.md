@@ -43,7 +43,7 @@ can see the content in `main/sd-partition-table.csv` it results in the following
     nvs,      data, nvs,     0x009000, 0x005000,
     otadata,  data, ota,     0x00e000, 0x002000,
     app,      app,  ota_0,   0x010000, 0x380000,
-    sdflash,  app,  ota_1,   0x390000, 0x040000,
+    flashApp, app,  ota_1,   0x390000, 0x040000,
     spiffs,   data, spiffs,  0x3D0000, 0x030000,
 
 It is mainly based on the existing partition schema, to change as little as possible
