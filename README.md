@@ -32,7 +32,7 @@ integrated into existing applications.
 The code for the smaller partition should be on one side very generic but also as compact as possible
 to allow a small partition size.
 
-## details
+## Details
 
 SPI_FLASH_DANGEROUS_WRITE - must be set to allow
 
@@ -48,3 +48,8 @@ can see the content in `main/sd-partition-table.csv` it results in the following
 
 It is mainly based on the existing partition schema, to change as little as possible
 and let existing `spiffs` data intact.
+
+## Compile
+
+If the build fails with '', remove all `CMake*.txt` files and run `platformio run` which
+worked for me.
