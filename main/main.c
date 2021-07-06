@@ -81,7 +81,7 @@ static void logAppVersion(const esp_partition_t *partition) {
     char hash_print[HASH_LEN * 2 + 1];
     hash_print[HASH_LEN * 2] = 0;
     for (int i = 0; i < HASH_LEN; ++i) {
-        sprintf(&hash_print[i * 2], "%02x", app_desc.app_elf_sha256[i]);
+        snprintf(&hash_print[i * 2], 3, "%02x", app_desc.app_elf_sha256[i]);
     }
     ESP_LOGI(TAG, "App '%s', Version: '%s'", app_desc.project_name, app_desc.version);
     ESP_LOGI(TAG, "IDF-Version: '%s'", app_desc.idf_ver);
