@@ -32,11 +32,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Install build dependencies
-      run: |
-        apt-get update
-        apt-get install -qq -y zip
-
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
@@ -110,6 +105,11 @@ jobs:
         unzip -qq sonar-scanner-cli-${{ env.SONAR_SCANNER_VERSION }}-linux.zip
         rm sonar-scanner-cli-${{ env.SONAR_SCANNER_VERSION }}-linux.zip
         cd ..
+
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -qq -y zip
 
     - name: Build flashsd
       run: |
