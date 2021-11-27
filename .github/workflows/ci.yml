@@ -31,19 +31,36 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-    # could use a container with sq tools already installed
-       image: infinitecoding/platformio-for-ci:latest
     steps:
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
 
+    - name: Cache pip
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    - name: Cache PlatformIO
+      uses: actions/cache@v2
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-${{ hashFiles('**/lockfiles') }}
+    - name: Set up Python
+      uses: actions/setup-python@v2
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade platformio
+
+
     - name: Prepare source
       run: |
         mkdir bin
         echo GITHUB Ref: ${{ github.ref }}
-        VERSION_STRING=`grep "const char \*VERSION =" main/main.c`
+        VERSION_STRING=`grep "const char \*VERSION =" src/main.c`
         MAJOR=`echo ${VERSION_STRING} | cut -f2 -d\"`
         if [ "${{ github.ref }}" = "refs/heads/main" ]
         then
@@ -73,8 +90,8 @@ jobs:
         path: |
           ~/.sonar/cache
           sonarqube
-        key: ${{ runner.os }}-sonar-${{ env.SONAR_SCANNER_VERSION }}-ng3
-        restore-keys: ${{ runner.os }}-sonar-${{ env.SONAR_SCANNER_VERSION }}-ng3
+        key: ${{ runner.os }}-sonar-${{ env.SONAR_SCANNER_VERSION }}-ng
+        restore-keys: ${{ runner.os }}-sonar-${{ env.SONAR_SCANNER_VERSION }}-ng
 
     - name: Install SonarQube dependencies
       if: steps.cache-sonar.outputs.cache-hit != 'true'
@@ -91,15 +108,15 @@ jobs:
 
     - name: Install build dependencies
       run: |
-        apt-get update
-        apt-get install -qq -y zip
+        sudo apt-get update
+        sudo apt-get install -qq -y zip
 
     - name: Build flashsd
       run: |
         mkdir sonarqube-out
         ./sonarqube/build-wrapper-linux-x86/build-wrapper-linux-x86-64 --out-dir sonarqube-out \
           platformio run --disable-auto-clean
-        # platformio ci -v --build-dir="./bin" --keep-build-dir --project-conf=platformio.ini ./main/
+        # platformio ci -v --build-dir="./bin" --keep-build-dir --project-conf=platformio.ini ./src/
 
     - name: Package firmware
       run: |
@@ -133,7 +150,7 @@ jobs:
           -Dsonar.organization=openbikesensor \
           -Dsonar.projectKey=openbikesensor_OpenBikeSensorFlash \
           -Dsonar.coverage.exclusions=**/* \
-          -Dsonar.sources=main \
+          -Dsonar.sources=src \
           -Dsonar.sourceEncoding=UTF-8 \
           -Dsonar.cfamily.cache.enabled=false \
           -Dsonar.cfamily.threads=1 \
