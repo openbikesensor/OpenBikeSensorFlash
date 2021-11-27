@@ -133,7 +133,7 @@ jobs:
           -Dsonar.organization=openbikesensor \
           -Dsonar.projectKey=openbikesensor_OpenBikeSensorFlash \
           -Dsonar.coverage.exclusions=**/* \
-          -Dsonar.sources=main \
+          -Dsonar.sources=src \
           -Dsonar.sourceEncoding=UTF-8 \
           -Dsonar.cfamily.cache.enabled=false \
           -Dsonar.cfamily.threads=1 \
