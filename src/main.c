@@ -29,7 +29,7 @@
 #include "esp_vfs_fat.h"
 
 // Version only change the "vN.M" part if needed.
-const char *VERSION = "v0.1" BUILD_NUMBER;
+const char *VERSION = "v0.2" BUILD_NUMBER;
 
 // SD Card
 // Selected the same values as for the OBS!
