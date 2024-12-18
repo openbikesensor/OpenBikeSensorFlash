@@ -22,6 +22,7 @@
  */
 #include <stdio.h>
 #include <mbedtls/md.h>
+#include "esp_flash.h"
 #include "esp_system.h"
 #include "esp_ota_ops.h"
 #include "esp_log.h"
@@ -95,7 +96,7 @@ static void ensurePartition(const esp_partition_t *target) {
 
     if (running != target) {
         ESP_ERROR_CHECK(esp_partition_erase_range(target, 0, target->size));
-        ESP_LOGI(TAG, "Copying %s (0x%06x) -> %s (0x%06x) 0x%x bytes",
+        ESP_LOGI(TAG, "Copying %s (0x%06lx) -> %s (0x%06lx) 0x%lx bytes",
                  running->label, running->address,
                  target->label, target->address, target->size);
         const uint16_t s = 8192;
@@ -114,9 +115,9 @@ static void ensurePartition(const esp_partition_t *target) {
 static void write_partition_table() {
     ESP_LOGI(TAG, "Will replace partition table.");
     ESP_LOGD(TAG, "Will erase partition table.");
-    ESP_ERROR_CHECK(spi_flash_erase_range(CONFIG_PARTITION_TABLE_OFFSET, 0x2000));
+    ESP_ERROR_CHECK(esp_flash_erase_region(NULL, CONFIG_PARTITION_TABLE_OFFSET, 0x2000));
     ESP_LOGD(TAG, "Will write new partition table.");
-    ESP_ERROR_CHECK(spi_flash_write(CONFIG_PARTITION_TABLE_OFFSET, partition_table, sizeof(partition_table)));
+    ESP_ERROR_CHECK(esp_flash_write(NULL, partition_table, CONFIG_PARTITION_TABLE_OFFSET, sizeof(partition_table)));
     ESP_LOGI(TAG, "New partition table created, will restart.");
     esp_restart();
 }
@@ -126,7 +127,7 @@ static const esp_partition_t *ensureNewPartitionTable() {
             ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0,
             "app"); // already there?
     if (app) {
-        ESP_LOGI(TAG, "Partition already there, size is 0x%0x bytes.", app->size);
+        ESP_LOGI(TAG, "Partition already there, size is 0x%0lx bytes.", app->size);
     } else {
         write_partition_table();
     }
@@ -219,7 +220,7 @@ static void assertValidAppBin() {
     fseek(f, 0, SEEK_END);
     const int32_t fileSize = ftell(f);
     fseek(f, 0, SEEK_SET);
-    ESP_LOGI(TAG, "Found '" FLASH_APP_FILENAME "' size %0x", fileSize);
+    ESP_LOGI(TAG, "Found '" FLASH_APP_FILENAME "' size %0lx", fileSize);
     if (fileSize > APP_PARTITION_SIZE) {
         fail("Firmware to flash is to large.");
     }
@@ -268,7 +269,7 @@ void app_main() {
                                                               ESP_PARTITION_SUBTYPE_ANY,
                                                               NULL);
         if (app->address != 0x10000) {
-            ESP_LOGE(TAG, "FATAL: 1st app partition '%s' unexpected start address: 0x%06x",
+            ESP_LOGE(TAG, "FATAL: 1st app partition '%s' unexpected start address: 0x%06lx",
                      app->label, app->address);
             abort();
         }

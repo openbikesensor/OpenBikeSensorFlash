@@ -5,3 +5,6 @@
 .vscode/ipch
 cmake-*/
 sdkconfig.old
+venv
+CMakeLists.txt
+.vscode
