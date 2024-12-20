@@ -22,11 +22,11 @@ available to store the data locally.
 
 ## The Implementation
 
-There is no implementation yet but the idea. Plan is to use as much of the existing functionality 
+Use as much of the existing functionality 
 as possible to keep all ESP32 OTA functionality alive and be able to use existing tools as much as
 possible.
 
-The code for the larger partition should be as little as possible so that is can be easily called and
+The code for the larger partition should be as little as possible so that it can be easily called and
 integrated into existing applications.
 
 The code for the smaller partition should be on one side very generic but also as compact as possible
